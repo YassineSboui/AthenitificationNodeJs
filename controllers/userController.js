@@ -1,5 +1,7 @@
 import generatToken from '../utils/generateToken.js'
 import users from '../data/users.js'
+import bcrypt from 'bcrypt'
+import jwt from 'jsonwebtoken'
 
 //@desc Register a new User
 //@route POST /api/users
@@ -12,12 +14,15 @@ const registerUser = async (req, res) => {
     res.status(400)
     throw new Error('User already exists')
   } else {
+    const cryptedPassword = await bcrypt.hash(password, 10)
     var User = {
       username: username,
-      password: await bcrypt.hash(password, 10),
+      password: cryptedPassword,
     }
     users.push(User)
-    return res.json(201, { user: User, message: 'User Created Successfully ' })
+    return res
+      .status(201)
+      .json({ user: User, message: 'User Created Successfully ' })
   }
 }
 
@@ -30,11 +35,11 @@ const authUser = async (req, res) => {
   const userExists = users?.find((user) => user.username === username)
 
   if (userExists) {
-    const verifPassword = await bcrypt.compare(password, user.password)
+    const verifPassword = await bcrypt.compare(password, userExists.password)
 
     if (verifPassword) {
       const token = generatToken(username)
-      return res.json(200, { user: username, token: token })
+      return res.status(200).json({ user: username, token: token })
     } else {
       res.status(401)
       throw new Error('Wrong Password')
@@ -42,6 +47,30 @@ const authUser = async (req, res) => {
   } else {
     res.status(401)
     throw new Error('Invalid Username')
+  }
+}
+
+const protect = async (req, res, next) => {
+  let token
+  if (req.headers.authorization) {
+    try {
+      token = req.headers.authorization
+
+      const decoded = jwt.verify(token, 'Yassine')
+
+      req.user = users?.find((user) => user.username === decoded.username)
+
+      next()
+    } catch (error) {
+      console.error(error)
+      res.status(401)
+      throw new Error('Not authorized , Token  failed')
+    }
+  }
+
+  if (!token) {
+    res.status(401)
+    throw new Error('Not authorized , No Token')
   }
 }
 
@@ -61,4 +90,4 @@ const getUserProfile = async (req, res) => {
   }
 }
 
-export { authUser, getUserProfile, registerUser }
+export { authUser, getUserProfile, registerUser, protect }
